@@ -47,7 +47,7 @@ class CaptionModel(nn.Module):
                 for q in range(rows): # for each beam expansion
                     #compute logprob of expanding beam q with word in (sorted) position c
                     local_logprob = ys[q,c]
-                    candidate_logprob = beam_logprobs_sum[q] + local_logprob
+                    candidate_logprob = beam_logprobs_sum[q].cuda() + local_logprob
                     candidates.append({'c':ix[q,c], 'q':q, 'p':candidate_logprob, 'r':local_logprob})
             candidates = sorted(candidates,  key=lambda x: -x['p'])
             
