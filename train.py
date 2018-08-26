@@ -18,6 +18,7 @@ import models
 from dataloader import *
 import eval_utils
 import misc.utils as utils
+from criterions.expectedBLEUave import mBLEU
 
 import tensorflow as tf
 
@@ -76,7 +77,8 @@ def train(opt):
     # Assure in training mode
     model.train()
 
-    crit = utils.LanguageModelCriterion()
+    crit_ce = utils.LanguageModelCriterion()
+    crit_mb = mBLEU(4)
 
     optimizer = optim.Adam(model.parameters(), lr=opt.learning_rate, weight_decay=opt.weight_decay)
 
@@ -90,7 +92,7 @@ def train(opt):
         eval_kwargs = {'split': 'val',
                        'dataset': opt.input_json}
         eval_kwargs.update(vars(opt))
-        val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit, loader, eval_kwargs)
+        val_loss, predictions, lang_stats = eval_utils.eval_split(model, crit_ce, loader, eval_kwargs)
 
         # Write validation result into summary
         if tf is not None:
@@ -135,7 +137,14 @@ def train(opt):
         fc_feats, att_feats, labels, masks = tmp
         
         optimizer.zero_grad()
-        loss = crit(model(fc_feats, att_feats, labels), labels[:,1:], masks[:,1:])
+        logits = model(fc_feats, att_feats, labels)
+        if opt.bleu_w == 0:
+            loss = crit_ce(logits, labels, masks)
+        elif opt.bleu_w == 1:
+            loss = crit_mb(logits, labels, masks)
+        else:
+            loss = crit_ce(logits, labels, masks) * (1 - opt.bleu_w) \
+                 + crit_mb(logits, labels, masks) * opt.bleu_w
         loss.backward()
         utils.clip_gradient(optimizer, opt.grad_clip)
         optimizer.step()
@@ -197,7 +206,7 @@ def train(opt):
                 def save_model(suffix=''):
                     model_path = os.path.join(opt.checkpoint_path, 'model{}.pth'.format(suffix))
                     torch.save(model.state_dict(), model_path)
-                    print("model saved to {}".format(checkpoint_path))
+                    print("model saved to {}".format(model_path))
                     optimizer_path = os.path.join(opt.checkpoint_path, 'optimizer{}.pth'.format(suffix))
                     torch.save(optimizer.state_dict(), optimizer_path)
 
