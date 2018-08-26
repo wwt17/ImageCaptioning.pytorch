@@ -102,6 +102,8 @@ def parse_opt():
                     help='if true then use 80k, else use 110k')
     parser.add_argument('--bleu_w', type=float, default=0.,
                     help='weight of bleu loss (between 0 and 1 inclusive)')
+    parser.add_argument('--teach_gap', type=int, default=1)
+    parser.add_argument('--teach_cont', type=int, default=0)
 
     args = parser.parse_args()
 
@@ -118,5 +120,8 @@ def parse_opt():
     assert args.language_eval == 0 or args.language_eval == 1, "language_eval should be 0 or 1"
     assert args.load_best_score == 0 or args.load_best_score == 1, "language_eval should be 0 or 1"
     assert args.train_only == 0 or args.train_only == 1, "language_eval should be 0 or 1"
+    assert 0 <= args.bleu_w <= 1, "bleu_w should be between 0 and 1"
+    assert args.teach_gap >= 0, "teach_gap should be greater than 0"
+    assert args.teach_cont >= 0, "teach_cont should be greater than 0"
 
     return args

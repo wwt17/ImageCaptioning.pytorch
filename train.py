@@ -133,22 +133,30 @@ def train(opt):
         start = time.time()
 
         tmp = [data['fc_feats'], data['att_feats'], data['labels'], data['masks']]
-        tmp = [Variable(torch.from_numpy(_), requires_grad=False).cuda() for _ in tmp]
+        tmp = [torch.from_numpy(_).cuda() for _ in tmp]
         fc_feats, att_feats, labels, masks = tmp
         
         optimizer.zero_grad()
-        logits = model(fc_feats, att_feats, labels)
-        if opt.bleu_w == 0:
-            loss = crit_ce(logits, labels, masks)
-        elif opt.bleu_w == 1:
-            loss = crit_mb(logits, labels, masks)
+        if opt.bleu_w != 1:
+            logits = model(fc_feats, att_feats, labels)
+            logits = utils.add_bos(logits)
+            loss_ce = crit_ce(logits, labels, masks)
         else:
-            loss = crit_ce(logits, labels, masks) * (1 - opt.bleu_w) \
-                 + crit_mb(logits, labels, masks) * opt.bleu_w
+            loss_ce = 0.
+        if opt.bleu_w != 0:
+            teach_flags = make_teach_flags(labels.size(1)-1, opt.teach_gap, opt.teach_cont)
+            onehot = utils.to_onehot(labels, opt.vocab_size, dtype=torch.float)
+            logits = model(fc_feats, att_feats, labels, teach_flags=teach_flags)
+            logits = utils.add_bos(logits)
+            logits = utils.mask_logits(logits, onehot, teach_flags)
+            loss_mb = crit_mb(logits, labels, masks)
+        else:
+            loss_mb = 0.
+        loss = loss_ce * (1-opt.bleu_w) + loss_mb * opt.bleu_w
         loss.backward()
         utils.clip_gradient(optimizer, opt.grad_clip)
         optimizer.step()
-        train_loss = loss.data[0]
+        train_loss = float(loss)
         torch.cuda.synchronize()
         end = time.time()
         print("iter {} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \

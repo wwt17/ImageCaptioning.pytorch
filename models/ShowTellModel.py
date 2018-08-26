@@ -32,6 +32,9 @@ class ShowTellModel(CaptionModel):
 
         self.init_weights()
 
+    def soft_embed(self, probs):
+        return torch.mm(probs, self.embed.weight)
+
     def init_weights(self):
         initrange = 0.1
         self.embed.weight.data.uniform_(-initrange, initrange)
@@ -46,40 +49,35 @@ class ShowTellModel(CaptionModel):
         else:
             return Variable(weight.new(self.num_layers, bsz, self.rnn_size).zero_())
 
-    def forward(self, fc_feats, att_feats, seq):
+    def forward(self, fc_feats, att_feats, seq, teach_flags=None):
+        assert self.ss_prob == 0, "scheduled sampling enabled"
+        if teach_flags is None:
+            teach_flags = [True] + [False] * (seq.size(1)-1)
+        else:
+            assert self.ss_prob == 0, "unable to apply teach mask with scheduled sampling enabled"
+            assert self.training, "unable to apply teach mask when not training"
+
         batch_size = fc_feats.size(0)
         state = self.init_hidden(batch_size)
         outputs = []
 
-        for i in range(seq.size(1)):
-            if i == 0:
+        for t in range(-1, seq.size(1)-1):
+            if t == -1:
                 xt = self.img_embed(fc_feats)
             else:
-                if self.training and i >= 2 and self.ss_prob > 0.0: # otherwiste no need to sample
-                    sample_prob = fc_feats.data.new(batch_size).uniform_(0, 1)
-                    sample_mask = sample_prob < self.ss_prob
-                    if sample_mask.sum() == 0:
-                        it = seq[:, i-1].clone()
-                    else:
-                        sample_ind = sample_mask.nonzero().view(-1)
-                        it = seq[:, i-1].data.clone()
-                        #prob_prev = torch.exp(outputs[-1].data.index_select(0, sample_ind)) # fetch prev distribution: shape Nx(M+1)
-                        #it.index_copy_(0, sample_ind, torch.multinomial(prob_prev, 1).view(-1))
-                        prob_prev = torch.exp(outputs[-1].data) # fetch prev distribution: shape Nx(M+1)
-                        it.index_copy_(0, sample_ind, torch.multinomial(prob_prev, 1).view(-1).index_select(0, sample_ind))
-                        it = Variable(it, requires_grad=False)
-                else:
-                    it = seq[:, i-1].clone()                
                 # break if all the sequences end
-                if i >= 2 and seq[:, i-1].data.sum() == 0:
+                if t >= 1 and seq[:, t].data.sum() == 0:
                     break
-                xt = self.embed(it)
+                if teach_flags[t]:
+                    xt = self.embed(seq[:, t])
+                else:
+                    xt = self.soft_embed(torch.exp(outputs[-1]))
 
             output, state = self.core(xt.unsqueeze(0), state)
-            output = F.log_softmax(self.logit(self.dropout(output.squeeze(0))))
+            output = F.log_softmax(self.logit(self.dropout(output.squeeze(0))), -1)
             outputs.append(output)
 
-        return torch.cat([_.unsqueeze(1) for _ in outputs[1:]], 1).contiguous()
+        return torch.stack(outputs[1:], 1).contiguous()
 
     def get_logprobs_state(self, it, state):
         # 'it' is Variable contraining a word index
