@@ -84,7 +84,7 @@ class ShowTellModel(CaptionModel):
         xt = self.embed(it)
                 
         output, state = self.core(xt.unsqueeze(0), state)
-        logprobs = F.log_softmax(self.logit(self.dropout(output.squeeze(0))))
+        logprobs = F.log_softmax(self.logit(self.dropout(output.squeeze(0))), -1)
 
         return logprobs, state
 
@@ -108,7 +108,7 @@ class ShowTellModel(CaptionModel):
                     xt = self.embed(Variable(it, requires_grad=False))
 
                 output, state = self.core(xt.unsqueeze(0), state)
-                logprobs = F.log_softmax(self.logit(self.dropout(output.squeeze(0))))
+                logprobs = F.log_softmax(self.logit(self.dropout(output.squeeze(0))), -1)
 
             self.done_beams[k] = self.beam_search(state, logprobs, opt=opt)
             seq[:, k] = self.done_beams[k][0]['seq'] # the first beam has highest cumulative score
