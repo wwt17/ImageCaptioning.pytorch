@@ -85,6 +85,8 @@ def train(opt):
         optimizer.load_state_dict(torch.load(os.path.join(opt.start_from, 'optimizer.pth')))
 
     def eval_model():
+        model.eval()
+
         eval_kwargs = {'split': 'val',
                        'dataset': opt.input_json}
         eval_kwargs.update(vars(opt))
@@ -96,6 +98,8 @@ def train(opt):
             for k,v in lang_stats.items():
                 add_summary_value(tf_summary_writer, k, v, iteration)
             tf_summary_writer.flush()
+
+        model.train()
 
         return val_loss, predictions, lang_stats
 
