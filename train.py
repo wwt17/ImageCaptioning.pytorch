@@ -127,7 +127,8 @@ def train(opt):
         start = time.time()
         # Load data from train split (0)
         data = loader.get_batch('train')
-        print('Read data:', time.time() - start)
+        if iteration % opt.print_iters == 0:
+            print('Read data:', time.time() - start)
 
         torch.cuda.synchronize()
         start = time.time()
@@ -159,8 +160,9 @@ def train(opt):
         train_loss = float(loss)
         torch.cuda.synchronize()
         end = time.time()
-        print("iter {} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \
-            .format(iteration, epoch, train_loss, end - start))
+        if iteration % opt.print_iters == 0:
+            print("iter {} (epoch {}), train_loss = {:.3f}, time/batch = {:.3f}" \
+                .format(iteration, epoch, train_loss, end - start))
 
         # Update the iteration and epoch
         iteration += 1

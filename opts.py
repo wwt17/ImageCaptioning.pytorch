@@ -104,6 +104,7 @@ def parse_opt():
                     help='weight of bleu loss (between 0 and 1 inclusive)')
     parser.add_argument('--teach_gap', type=int, default=1)
     parser.add_argument('--teach_cont', type=int, default=0)
+    parser.add_argument('--print_iters', type=int, default=10)
 
     args = parser.parse_args()
 
