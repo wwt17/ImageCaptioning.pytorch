@@ -88,13 +88,13 @@ def parse_opt():
 
 
     # Evaluation/Checkpointing
-    parser.add_argument('--val_images_use', type=int, default=3200,
+    parser.add_argument('--val_images_use', type=int, default=5000,
                     help='how many images to use when periodically evaluating the validation loss? (-1 = all)')
-    parser.add_argument('--save_checkpoint_every', type=int, default=2500,
+    parser.add_argument('--save_checkpoint_every', type=int, default=6000,
                     help='how often to save a model checkpoint (in iterations)?')
     parser.add_argument('--checkpoint_path', type=str, default='save',
                     help='directory to store checkpointed models')
-    parser.add_argument('--language_eval', type=int, default=0,
+    parser.add_argument('--language_eval', type=int, default=1,
                     help='Evaluate language as well (1 = yes, 0 = no)? BLEU/CIDEr/METEOR/ROUGE_L? requires coco-caption code from Github.')
     parser.add_argument('--losses_log_every', type=int, default=25,
                     help='How often do we snapshot losses, for inclusion in the progress dump? (0 = disable)')       
@@ -106,7 +106,7 @@ def parse_opt():
                     help='an id identifying this run/job. used in cross-val and appended when writing progress files')
     parser.add_argument('--train_only', type=int, default=0,
                     help='if true then use 80k, else use 110k')
-    parser.add_argument('--bleu_w', type=float, default=0.,
+    parser.add_argument('--bleu_w', type=float, default=1.,
                     help='weight of bleu loss (between 0 and 1 inclusive)')
     parser.add_argument('--teach_gap', type=int, default=1)
     parser.add_argument('--teach_cont', type=int, default=0)
