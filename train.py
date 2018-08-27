@@ -140,17 +140,21 @@ def train(opt):
         optimizer.zero_grad()
         if opt.bleu_w != 1:
             logits = model(fc_feats, att_feats, labels)
-            logits = utils.add_bos(logits)
-            loss_ce = crit_ce(logits, labels, masks)
+            loss_ce = crit_ce(logits, labels[:, 1:], masks[:, 1:])
         else:
             loss_ce = 0.
         if opt.bleu_w != 0:
-            teach_flags = make_teach_flags(labels.size(1)-1, opt.teach_gap, opt.teach_cont)
-            onehot = utils.to_onehot(labels, opt.vocab_size, dtype=torch.float)
+            teach_flags = utils.make_teach_flags(labels.size(1)-1, opt.teach_gap, opt.teach_cont)
             logits = model(fc_feats, att_feats, labels, teach_flags=teach_flags)
-            logits = utils.add_bos(logits)
-            logits = utils.mask_logits(logits, onehot, teach_flags)
-            loss_mb = crit_mb(logits, labels, masks)
+            decode_length = logits.shape[1] + 1
+            teach_flags = teach_flags[:decode_length]
+            onehot = utils.to_onehot(labels[:, :decode_length], logits.shape[-1], dtype=torch.float)
+            probs = torch.exp(logits)
+            probs = torch.cat([onehot[:, :1], probs], 1) # pad bos
+            probs = utils.mask_probs(probs, onehot, teach_flags)
+            mask = masks[:, :decode_length]
+            mask = torch.cat([mask[:, :1], mask], 1)
+            loss_mb = crit_mb(probs, labels[:, :decode_length], mask)
         else:
             loss_mb = 0.
         loss = loss_ce * (1-opt.bleu_w) + loss_mb * opt.bleu_w

@@ -52,7 +52,7 @@ class ShowTellModel(CaptionModel):
     def forward(self, fc_feats, att_feats, seq, teach_flags=None):
         assert self.ss_prob == 0, "scheduled sampling enabled"
         if teach_flags is None:
-            teach_flags = [True] + [False] * (seq.size(1)-1)
+            teach_flags = [True] * seq.size(1)
         else:
             assert self.ss_prob == 0, "unable to apply teach mask with scheduled sampling enabled"
             assert self.training, "unable to apply teach mask when not training"

@@ -11,15 +11,11 @@ class mBLEU(nn.Module):
         assert not enable_recall
         assert enable_prec
         batch_size = X.shape[0]
-
-        Y = Y[:, X.shape[1]]
-        mask = mask[:, X.shape[1]]
-        lens = mask.sum(1)
-        maskX, lenX = mask, lens
-        maskY, lenY = mask, lens
-
         sizeX = X.shape[1]
         sizeY = Y.shape[1]
+        lens = mask.sum(1) - 1
+        maskX, lenX = mask, lens
+        maskY, lenY = mask, lens
 
         zero = torch.tensor(0., device=device)
         one = torch.tensor(1., device=device)
