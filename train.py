@@ -41,7 +41,7 @@ def train(opt):
             saved_model_opt = infos['opt']
             need_be_same=["caption_model", "rnn_type", "rnn_size", "num_layers"]
             for checkme in need_be_same:
-                assert vars(saved_model_opt)[checkme] == vars(opt)[checkme], "Command line argument and saved model disagree on '%s' " % checkme
+                assert getattr(saved_model_opt, checkme) == getattr(opt, checkme), "Command line argument and saved model disagree on '%s'" % checkme
         return infos
 
     def load_histories(dir=opt.start_from, suffix=''):
@@ -107,9 +107,11 @@ def train(opt):
 
     eval_model()
 
+    opt.current_teach_mask_prefix_length = opt.teach_mask_prefix_length
+
     while True:
         if update_lr_flag:
-                # Assign the learning rate
+            # Assign the learning rate
             if epoch > opt.learning_rate_decay_start and opt.learning_rate_decay_start >= 0:
                 frac = (epoch - opt.learning_rate_decay_start) // opt.learning_rate_decay_every
                 decay_factor = opt.learning_rate_decay_rate  ** frac
@@ -120,8 +122,12 @@ def train(opt):
             # Assign the scheduled sampling prob
             if epoch > opt.scheduled_sampling_start and opt.scheduled_sampling_start >= 0:
                 frac = (epoch - opt.scheduled_sampling_start) // opt.scheduled_sampling_increase_every
-                opt.ss_prob = min(opt.scheduled_sampling_increase_prob  * frac, opt.scheduled_sampling_max_prob)
+                opt.ss_prob = min(opt.scheduled_sampling_increase_prob * frac, opt.scheduled_sampling_max_prob)
                 model.ss_prob = opt.ss_prob
+            # Assign the teach mask prefix length
+            if epoch > opt.teach_mask_prefix_length_increase_start:
+                frac = (epoch - opt.teach_mask_prefix_length_increase_start) // opt.teach_mask_prefix_length_increase_every
+                opt.current_teach_mask_prefix_length = opt.teach_mask_prefix_length + frac * opt.teach_mask_prefix_length_increase_steps
             update_lr_flag = False
                 
         start = time.time()
@@ -144,14 +150,14 @@ def train(opt):
         else:
             loss_ce = 0.
         if opt.bleu_w != 0:
-            teach_flags = utils.make_teach_flags(labels.size(1)-1, opt.teach_gap, opt.teach_cont)
-            logits = model(fc_feats, att_feats, labels, teach_flags=teach_flags)
+            teach_mask = utils.make_teach_mask(labels.size(1), opt)
+            logits = model(fc_feats, att_feats, labels, teach_mask=teach_mask)
             decode_length = logits.shape[1] + 1
-            teach_flags = teach_flags[:decode_length]
+            teach_mask = teach_mask[:decode_length]
             onehot = utils.to_onehot(labels[:, :decode_length], logits.shape[-1], dtype=torch.float)
             probs = torch.exp(logits)
             probs = torch.cat([onehot[:, :1], probs], 1) # pad bos
-            probs = utils.mask_probs(probs, onehot, teach_flags)
+            probs = utils.mask_probs(probs, onehot, teach_mask)
             mask = masks[:, :decode_length]
             mask = torch.cat([mask[:, :1], mask], 1)
             loss_mb = crit_mb(probs, labels[:, :decode_length], mask)

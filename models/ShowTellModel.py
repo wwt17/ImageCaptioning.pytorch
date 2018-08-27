@@ -49,10 +49,10 @@ class ShowTellModel(CaptionModel):
         else:
             return Variable(weight.new(self.num_layers, bsz, self.rnn_size).zero_())
 
-    def forward(self, fc_feats, att_feats, seq, teach_flags=None):
+    def forward(self, fc_feats, att_feats, seq, teach_mask=None):
         assert self.ss_prob == 0, "scheduled sampling enabled"
-        if teach_flags is None:
-            teach_flags = [True] * seq.size(1)
+        if teach_mask is None:
+            teach_mask = [True] * seq.size(1)
         else:
             assert self.ss_prob == 0, "unable to apply teach mask with scheduled sampling enabled"
             assert self.training, "unable to apply teach mask when not training"
@@ -68,7 +68,7 @@ class ShowTellModel(CaptionModel):
                 # break if all the sequences end
                 if t >= 1 and seq[:, t].data.sum() == 0:
                     break
-                if teach_flags[t]:
+                if teach_mask[t]:
                     xt = self.embed(seq[:, t])
                 else:
                     xt = self.soft_embed(torch.exp(outputs[-1]))

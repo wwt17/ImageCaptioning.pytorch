@@ -45,14 +45,17 @@ def to_onehot(a, n, dtype=torch.long, device=None):
     ret.scatter_(-1, a, torch.ones(a.shape, dtype=dtype, device=device))
     return ret
 
-def make_teach_flags(length, gap, cont):
+def make_teach_mask(length, opt):
+    prefix_length = opt.current_teach_mask_prefix_length
+    gap = opt.teach_gap
+    cont = opt.teach_cont
     n = gap + cont
     r = random.randrange(n)
-    return [True] + [not (i % n < gap) for i in range(r, r+length)]
+    return [True] + [i >= prefix_length or (i+r) % n >= gap for i in range(length-1)]
 
-def mask_probs(probs, onehot, teach_flags):
-    teach_flags = torch.tensor(teach_flags, device=onehot.device).unsqueeze(-1)
-    return torch.where(teach_flags, onehot, probs)
+def mask_probs(probs, onehot, teach_mask):
+    teach_mask = torch.tensor(teach_mask, device=onehot.device).unsqueeze(-1)
+    return torch.where(teach_mask, onehot, probs)
 
 class LanguageModelCriterion(nn.Module):
     def __init__(self):

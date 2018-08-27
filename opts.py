@@ -80,6 +80,12 @@ def parse_opt():
     parser.add_argument('--scheduled_sampling_max_prob', type=float, default=0.25, 
                     help='Maximum scheduled sampling prob.')
 
+    # teach mask prefix length increase
+    parser.add_argument('--teach_mask_prefix_length', type=int, default=int(1e9))
+    parser.add_argument('--teach_mask_prefix_length_increase_start', type=int, default=int(1e9))
+    parser.add_argument('--teach_mask_prefix_length_increase_every', type=int, default=1)
+    parser.add_argument('--teach_mask_prefix_length_increase_steps', type=int, default=1)
+
 
     # Evaluation/Checkpointing
     parser.add_argument('--val_images_use', type=int, default=3200,
