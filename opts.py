@@ -108,9 +108,15 @@ def parse_opt():
                     help='if true then use 80k, else use 110k')
     parser.add_argument('--bleu_w', type=float, default=1.,
                     help='weight of bleu loss (between 0 and 1 inclusive)')
+    parser.add_argument('--min_fn', type=str, default='min')
+    parser.add_argument('--min_c', type=float, default=1.)
     parser.add_argument('--teach_gap', type=int, default=1)
     parser.add_argument('--teach_cont', type=int, default=0)
+    parser.add_argument('--teach_bos', type=lambda x: bool(int(x)), default=True)
+    parser.add_argument('--teach_ce', type=lambda x: bool(int(x)), default=False)
     parser.add_argument('--print_iters', type=int, default=10)
+    parser.add_argument('--verbose_iters', type=int, default=500)
+    parser.add_argument('--samples', type=int, default=5)
 
     args = parser.parse_args()
 

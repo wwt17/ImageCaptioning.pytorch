@@ -14,22 +14,16 @@ def if_use_att(caption_model):
         return False
     return True
 
-# Input: seq, N*D numpy array, with element 0 .. vocab_size. 0 is END token.
-def decode_sequence(ix_to_word, seq):
-    N, D = seq.size()
-    out = []
-    for i in range(N):
-        txt = ''
-        for j in range(D):
-            ix = seq[i,j]
-            if ix > 0 :
-                if j >= 1:
-                    txt = txt + ' '
-                txt = txt + ix_to_word[str(int(ix.cpu()))]
-            else:
-                break
-        out.append(txt)
-    return out
+def decode_sequence(loader, ids):
+    words = loader.ids_to_words(ids)
+    pad = loader.ids_to_words(0)
+    ret = []
+    for i in range(len(words)):
+        sent = list(words[i][1:])
+        while sent and sent[-1] == pad:
+            sent.pop()
+        ret.append(' '.join(sent))
+    return ret
 
 def to_contiguous(tensor):
     if tensor.is_contiguous():
@@ -51,7 +45,7 @@ def make_teach_mask(length, opt):
     cont = opt.teach_cont
     n = gap + cont
     r = random.randrange(n)
-    return [True] + [i >= prefix_length or (i+r) % n >= gap for i in range(length-1)]
+    return [opt.teach_bos] + [i >= prefix_length or (i+r) % n >= gap for i in range(length-1)]
 
 def mask_probs(probs, onehot, teach_mask):
     teach_mask = torch.tensor(teach_mask, device=onehot.device).unsqueeze(-1)

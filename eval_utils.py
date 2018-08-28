@@ -103,7 +103,7 @@ def eval_split(model, crit, loader, eval_kwargs={}):
         seq, _ = model.sample(fc_feats, att_feats, eval_kwargs)
         
         #set_trace()
-        sents = utils.decode_sequence(loader.get_vocab(), seq)
+        sents = utils.decode_sequence(loader, seq)
 
         for k, sent in enumerate(sents):
             entry = {'image_id': data['infos'][k]['id'], 'caption': sent}

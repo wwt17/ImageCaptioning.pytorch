@@ -66,8 +66,10 @@ class DataLoader(data.Dataset):
         print('DataLoader loading json file: ', opt.input_json)
         self.info = json.load(open(self.opt.input_json))
         self.ix_to_word = self.info['ix_to_word']
+        self.ix_to_word = {int(ix): word for ix, word in self.ix_to_word.items()}
         self.vocab_size = len(self.ix_to_word)
         print('vocab size is ', self.vocab_size)
+        self.ix_to_word[0] = ''
 
         # open the hdf5 file
         print('DataLoader loading h5 file: ', opt.input_fc_dir,
@@ -122,6 +124,15 @@ class DataLoader(data.Dataset):
 
         import atexit
         atexit.register(cleanup)
+
+    def ids_to_words(self, ids):
+        if isinstance(ids, int):
+            return self.ix_to_word[ids]
+        if isinstance(ids, (list, tuple)):
+            return (type(ids))(map(self.ids_to_words, ids))
+        if isinstance(ids, torch.Tensor):
+            ids = ids.data.cpu().numpy()
+        return np.vectorize(lambda idx: self.ix_to_word[idx])(ids)
 
     def get_batch(self, split, batch_size=None, seq_per_img=None):
         batch_size = batch_size or self.batch_size

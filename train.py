@@ -31,6 +31,8 @@ def train(opt):
     loader = DataLoader(opt)
     opt.vocab_size = loader.vocab_size
     opt.seq_length = loader.seq_length
+    def ids_to_sents(ids):
+        return utils.decode_sequence(loader, ids)
 
     tf_summary_writer = tf and tf.summary.FileWriter(opt.checkpoint_path)
 
@@ -129,7 +131,9 @@ def train(opt):
                 frac = (epoch - opt.teach_mask_prefix_length_increase_start) // opt.teach_mask_prefix_length_increase_every
                 opt.current_teach_mask_prefix_length = opt.teach_mask_prefix_length + frac * opt.teach_mask_prefix_length_increase_steps
             update_lr_flag = False
-                
+ 
+        verbose = (iteration % opt.verbose_iters == 0)
+
         start = time.time()
         # Load data from train split (0)
         data = loader.get_batch('train')
@@ -144,28 +148,44 @@ def train(opt):
         fc_feats, att_feats, labels, masks = tmp
         
         optimizer.zero_grad()
-        if opt.bleu_w != 1:
-            logits = model(fc_feats, att_feats, labels)
+        teach_mask = utils.make_teach_mask(labels.size(1), opt)
+        enable_ce = (opt.bleu_w != 1)
+        enable_mb = (opt.bleu_w != 0)
+        if enable_ce:
+            logits = model(fc_feats, att_feats, labels, teach_mask=(teach_mask if opt.teach_ce else None))
             loss_ce = crit_ce(logits, labels[:, 1:], masks[:, 1:])
         else:
             loss_ce = 0.
-        if opt.bleu_w != 0:
-            teach_mask = utils.make_teach_mask(labels.size(1), opt)
+        if enable_mb:
             logits = model(fc_feats, att_feats, labels, teach_mask=teach_mask)
             decode_length = logits.shape[1] + 1
             teach_mask = teach_mask[:decode_length]
             onehot = utils.to_onehot(labels[:, :decode_length], logits.shape[-1], dtype=torch.float)
             probs = torch.exp(logits)
             probs = torch.cat([onehot[:, :1], probs], 1) # pad bos
+            original_probs = probs
+            if verbose:
+                original_probs.retain_grad()
             probs = utils.mask_probs(probs, onehot, teach_mask)
             mask = masks[:, :decode_length]
             mask = torch.cat([mask[:, :1], mask], 1)
-            loss_mb = crit_mb(probs, labels[:, :decode_length], mask)
+            loss_mb = crit_mb(probs, labels[:, :decode_length], mask, min_fn=opt.min_fn, min_c=opt.min_c)
         else:
             loss_mb = 0.
         loss = loss_ce * (1-opt.bleu_w) + loss_mb * opt.bleu_w
         loss.backward()
-        utils.clip_gradient(optimizer, opt.grad_clip)
+        utils.clip_gradient(optimizer, opt.grad_clip) #TODO: examine clip method and record grad
+
+        if enable_mb and verbose:
+            max_grads, max_ids = original_probs.grad.min(-1)
+            max_probs = torch.gather(original_probs, -1, max_ids.unsqueeze(-1)).squeeze(-1)
+            max_sents = ids_to_sents(max_ids)
+            for sample_i in range(min(opt.samples, original_probs.shape[0])):
+                l = len(max_sents[sample_i]) + 1
+                print('max:\n{}'.format(max_sents[sample_i]))
+                print('max probs:\n{}'.format(max_probs[sample_i][:l]))
+                print('max grads:\n{}'.format(max_grads[sample_i][:l]))
+
         optimizer.step()
         train_loss = float(loss)
         torch.cuda.synchronize()
@@ -216,7 +236,6 @@ def train(opt):
                 infos['split_ix'] = loader.split_ix
                 infos['best_val_score'] = best_val_score
                 infos['opt'] = opt
-                infos['vocab'] = loader.get_vocab()
 
                 histories['val_result_history'] = val_result_history
                 histories['loss_history'] = loss_history

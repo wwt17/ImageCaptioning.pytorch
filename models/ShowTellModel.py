@@ -161,6 +161,6 @@ class ShowTellModel(CaptionModel):
                 seqLogprobs.append(sampleLogprobs.view(-1))
 
             output, state = self.core(xt.unsqueeze(0), state)
-            logprobs = F.log_softmax(self.logit(self.dropout(output.squeeze(0))))
+            logprobs = F.log_softmax(self.logit(self.dropout(output.squeeze(0))), -1)
 
-        return torch.cat([_.unsqueeze(1) for _ in seq], 1), torch.cat([_.unsqueeze(1) for _ in seqLogprobs], 1)
+        return torch.stack(seq, 1), torch.stack(seqLogprobs, 1)
