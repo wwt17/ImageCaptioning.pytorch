@@ -39,9 +39,8 @@ def language_eval(dataset, preds, model_id, split):
     # filter results to only those in MSCOCO validation set (will be about a third)
     preds_filt = [p for p in preds if p['image_id'] in valids]
     print('using %d/%d predictions' % (len(preds_filt), len(preds)))
-    json.dump(preds_filt, open(cache_path, 'w')) # serialize to temporary json file. Sigh, COCO API...
 
-    cocoRes = coco.loadRes(cache_path)
+    cocoRes = coco.loadRes(preds_filt)
     cocoEval = COCOEvalCap(coco, cocoRes)
     cocoEval.params['image_id'] = cocoRes.getImgIds()
     cocoEval.evaluate()
@@ -60,7 +59,11 @@ def language_eval(dataset, preds, model_id, split):
 
     return out
 
+last_lang_stats = {}
+
 def eval_split(model, crit, loader, eval_kwargs={}):
+    global last_lang_stats
+
     verbose = eval_kwargs.get('verbose', True)
     num_images = eval_kwargs.get('num_images', eval_kwargs.get('val_images_use', -1))
     split = eval_kwargs.get('split', 'val')
@@ -137,7 +140,11 @@ def eval_split(model, crit, loader, eval_kwargs={}):
 
     lang_stats = None
     if lang_eval == 1:
-        lang_stats = language_eval(dataset, predictions, eval_kwargs['id'], split)
+        try:
+            lang_stats = language_eval(dataset, predictions, eval_kwargs['id'], split)
+            last_lang_stats = lang_stats
+        except:
+            lang_stats = last_lang_stats
 
     # Switch back to training mode
     model.train()

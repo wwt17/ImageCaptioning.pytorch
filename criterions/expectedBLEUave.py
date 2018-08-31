@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
+import numpy as np
 import logging
+from criterion_utils import *
 
 class mBLEU(nn.Module):
     def __init__(self, max_order=4):
@@ -19,13 +21,7 @@ class mBLEU(nn.Module):
 
         zero = torch.tensor(0., device=device)
         one = torch.tensor(1., device=device)
-
-        if min_fn == 'min':
-            min_f = lambda x: torch.min(torch.tensor(min_c, device=device), x)
-        elif min_fn == 'tanh':
-            min_f = lambda x: torch.tanh(x / min_c)
-        else:
-            raise NotImplementedError("min_fn = {}".format(min_fn))
+        min_f = get_min_f(min_fn, min_c)
 
         XY = torch.gather(X, 2, Y.unsqueeze(1).expand([-1, X.shape[1], -1]))
         Y_ = Y.unsqueeze(2).expand([-1, -1, Y.shape[1]])
@@ -59,10 +55,10 @@ class mBLEU(nn.Module):
 
         if verbose:
             for b in range(min(5, batch_size)):
-                logging.info('sample#{}:'.format(b))
+                print('sample#{}:'.format(b))
                 l = int(lenY[b].data.cpu().numpy() + 1e-6)
                 for order in range(1, self.max_order + 1):
-                    logging.info('{}-gram:'.format(order))
+                    print('{}-gram:'.format(order))
                     ll = l - (order - 1)
 
         w = torch.tensor([0.1, 0.3, 0.3, 0.3], device=device)

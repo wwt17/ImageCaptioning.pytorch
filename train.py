@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.autograd import Variable
 import torch.optim as optim
 
@@ -18,7 +19,7 @@ import models
 from dataloader import *
 import eval_utils
 import misc.utils as utils
-from criterions.expectedBLEUave import mBLEU
+from criterions.matrixBLEUave import mBLEU
 
 import tensorflow as tf
 
@@ -152,35 +153,46 @@ def train(opt):
         enable_ce = (opt.bleu_w != 1)
         enable_mb = (opt.bleu_w != 0)
         if enable_ce:
-            logits = model(fc_feats, att_feats, labels, teach_mask=(teach_mask if opt.teach_ce else None))
+            logits = model(fc_feats, att_feats, labels, teach_mask=(teach_mask if opt.teach_ce and not opt.teach_all_input else None))
+            if opt.teach_ce:
+                decode_length = logits.shape[1] + 1
+                teach_mask = teach_mask[:decode_length]
+                onehot = utils.to_onehot(labels[:, :decode_length], logits.shape[-1], dtype=torch.float)
+                probs = torch.exp(logits)
+                probs = torch.cat([onehot[:, :1], probs], 1)
+                probs = utils.mask_probs(probs, onehot, teach_mask)
+                if verbose:
+                    verbose_probs = probs
+                    verbose_probs.retain_grad()
+                logits = torch.log(1. - (1. - 1e-6) * (1. - probs))[:, 1:]
             loss_ce = crit_ce(logits, labels[:, 1:], masks[:, 1:])
         else:
             loss_ce = 0.
         if enable_mb:
-            logits = model(fc_feats, att_feats, labels, teach_mask=teach_mask)
+            logits = model(fc_feats, att_feats, labels, teach_mask=(teach_mask if not opt.teach_all_input else None))
             decode_length = logits.shape[1] + 1
             teach_mask = teach_mask[:decode_length]
             onehot = utils.to_onehot(labels[:, :decode_length], logits.shape[-1], dtype=torch.float)
             probs = torch.exp(logits)
             probs = torch.cat([onehot[:, :1], probs], 1) # pad bos
-            original_probs = probs
-            if verbose:
-                original_probs.retain_grad()
             probs = utils.mask_probs(probs, onehot, teach_mask)
+            if verbose:
+                verbose_probs = probs
+                verbose_probs.retain_grad()
             mask = masks[:, :decode_length]
             mask = torch.cat([mask[:, :1], mask], 1)
-            loss_mb = crit_mb(probs, labels[:, :decode_length], mask, min_fn=opt.min_fn, min_c=opt.min_c)
+            loss_mb = crit_mb(probs, labels[:, :decode_length], mask, min_fn=opt.min_fn, min_c=opt.min_c, verbose=verbose)
         else:
             loss_mb = 0.
         loss = loss_ce * (1-opt.bleu_w) + loss_mb * opt.bleu_w
         loss.backward()
         utils.clip_gradient(optimizer, opt.grad_clip) #TODO: examine clip method and record grad
 
-        if enable_mb and verbose:
-            max_grads, max_ids = original_probs.grad.min(-1)
-            max_probs = torch.gather(original_probs, -1, max_ids.unsqueeze(-1)).squeeze(-1)
-            max_sents = ids_to_sents(max_ids)
-            for sample_i in range(min(opt.samples, original_probs.shape[0])):
+        if verbose and 'verbose_probs' in locals():
+            max_grads, max_ids = verbose_probs.grad.topk(opt.verbose_topk, -1, largest=False)
+            max_probs = torch.gather(verbose_probs, -1, max_ids)
+            max_sents = ids_to_sents(max_ids[:, :, 0])
+            for sample_i in range(min(opt.samples, verbose_probs.shape[0])):
                 l = len(max_sents[sample_i]) + 1
                 print('max:\n{}'.format(max_sents[sample_i]))
                 print('max probs:\n{}'.format(max_probs[sample_i][:l]))

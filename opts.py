@@ -113,9 +113,11 @@ def parse_opt():
     parser.add_argument('--teach_gap', type=int, default=1)
     parser.add_argument('--teach_cont', type=int, default=0)
     parser.add_argument('--teach_bos', type=lambda x: bool(int(x)), default=True)
+    parser.add_argument('--teach_all_input', type=lambda x: bool(int(x)), default=False)
     parser.add_argument('--teach_ce', type=lambda x: bool(int(x)), default=False)
     parser.add_argument('--print_iters', type=int, default=10)
     parser.add_argument('--verbose_iters', type=int, default=500)
+    parser.add_argument('--verbose_topk', type=int, default=1)
     parser.add_argument('--samples', type=int, default=5)
 
     args = parser.parse_args()
