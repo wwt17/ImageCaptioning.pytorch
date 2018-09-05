@@ -19,7 +19,7 @@ def decode_sequence(loader, ids):
     pad = loader.ids_to_words(0)
     ret = []
     for i in range(len(words)):
-        sent = list(words[i][1:])
+        sent = list(words[i])
         while sent and sent[-1] == pad:
             sent.pop()
         ret.append(' '.join(sent))
