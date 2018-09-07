@@ -14,6 +14,15 @@ def if_use_att(caption_model):
         return False
     return True
 
+def seq_tolist(ids):
+    a = ids.tolist()
+    while a and a[-1] == 0:
+        a.pop()
+    return a
+
+def tolist(ids):
+    return list(map(seq_tolist, ids.cpu().numpy()))
+
 def decode_sequence(loader, ids):
     words = loader.ids_to_words(ids)
     pad = loader.ids_to_words(0)
@@ -55,17 +64,17 @@ class LanguageModelCriterion(nn.Module):
     def __init__(self):
         super(LanguageModelCriterion, self).__init__()
 
-    def forward(self, input, target, mask):
+    def forward(self, input, target, mask, reduce=True):
         # truncate to the same size
-        target = target[:, :input.size(1)]
-        mask =  mask[:, :input.size(1)]
-        input = to_contiguous(input).view(-1, input.size(2))
-        target = to_contiguous(target).view(-1, 1)
-        mask = to_contiguous(mask).view(-1, 1)
-        output = - input.gather(1, target) * mask
-        output = torch.sum(output) / torch.sum(mask)
-
-        return output
+        seq_len = input.size(1)
+        target = target[:, :seq_len]
+        mask = mask[:, :seq_len]
+        target = target.unsqueeze(-1)
+        output = - input.gather(-1, target).squeeze(-1) * mask
+        if reduce:
+            return output.sum() / mask.sum()
+        else:
+            return output.sum(1) / mask.sum(1)
 
 def set_lr(optimizer, lr):
     for group in optimizer.param_groups:

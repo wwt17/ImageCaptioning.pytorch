@@ -19,7 +19,9 @@ import models
 from dataloader import *
 import eval_utils
 import misc.utils as utils
-from criterions.matrixBLEUave import mBLEU
+from criterions.expectedBLEUave import mBLEU
+
+from texar.evals import sentence_bleu
 
 import tensorflow as tf
 
@@ -153,19 +155,39 @@ def train(opt):
         enable_ce = (opt.bleu_w != 1)
         enable_mb = (opt.bleu_w != 0)
         if enable_ce:
-            logits = model(fc_feats, att_feats, labels, teach_mask=(teach_mask if opt.teach_ce and not opt.teach_all_input else None))
-            if opt.teach_ce:
-                decode_length = logits.shape[1] + 1
-                teach_mask = teach_mask[:decode_length]
-                onehot = utils.to_onehot(labels[:, :decode_length], logits.shape[-1], dtype=torch.float)
-                probs = torch.exp(logits)
-                probs = torch.cat([onehot[:, :1], probs], 1)
-                probs = utils.mask_probs(probs, onehot, teach_mask)
-                if verbose:
-                    verbose_probs = probs
-                    verbose_probs.retain_grad()
-                logits = torch.log(1. - (1. - 1e-6) * (1. - probs))[:, 1:]
-            loss_ce = crit_ce(logits, labels[:, 1:], masks[:, 1:])
+            enable_xe = (opt.xe_w != 0)
+            enable_pg = (opt.pg_w != 0)
+            if enable_xe:
+                logits = model(fc_feats, att_feats, labels, teach_mask=(teach_mask if opt.teach_ce and not opt.teach_all_input else None))
+                if opt.teach_ce:
+                    decode_length = logits.shape[1] + 1
+                    teach_mask = teach_mask[:decode_length]
+                    onehot = utils.to_onehot(labels[:, :decode_length], logits.shape[-1], dtype=torch.float)
+                    probs = torch.exp(logits)
+                    probs = torch.cat([onehot[:, :1], probs], 1)
+                    probs = utils.mask_probs(probs, onehot, teach_mask)
+                    if verbose:
+                        verbose_probs = probs
+                        verbose_probs.retain_grad()
+                    logits = torch.log(1. - (1. - 1e-6) * (1. - probs))[:, 1:]
+                loss_xe = crit_ce(logits, labels[:, 1:], masks[:, 1:])
+            else:
+                loss_xe = 0.
+            if enable_pg:
+                ids_sample, logprobs_sample = model.sample(fc_feats, att_feats, opt={'sample_max': 0})
+                ids_greedy, logprobs_greedy = model.sample(fc_feats, att_feats, opt={'sample_max': 1})
+                seq_sample = utils.tolist(ids_sample)
+                seq_greedy = utils.tolist(ids_greedy)
+                seq_target = utils.tolist(labels[:, 1:])
+                rewards = [ sentence_bleu([t], s, smooth=True)
+                           -sentence_bleu([t], g, smooth=True)
+                           for s, g, t in zip(seq_sample, seq_greedy, seq_target)]
+                rewards = torch.tensor(rewards, device='cuda')
+                mask_sample = torch.ne(ids_sample, torch.tensor(0, device='cuda')).float()
+                loss_pg = (rewards * (logprobs_sample * mask_sample).sum(1)).mean()
+            else:
+                loss_pg = 0.
+            loss_ce = opt.xe_w * loss_xe + opt.pg_w * loss_pg
         else:
             loss_ce = 0.
         if enable_mb:

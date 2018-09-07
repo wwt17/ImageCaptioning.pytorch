@@ -106,6 +106,10 @@ def parse_opt():
                     help='an id identifying this run/job. used in cross-val and appended when writing progress files')
     parser.add_argument('--train_only', type=int, default=0,
                     help='if true then use 80k, else use 110k')
+    parser.add_argument('--xe_w', type=float, default=1.,
+                    help='weight of xe loss in (1-bleu_w) xe part')
+    parser.add_argument('--pg_w', type=float, default=0.,
+                    help='weight of pg loss in (1-bleu_w) xe part')
     parser.add_argument('--bleu_w', type=float, default=1.,
                     help='weight of bleu loss (between 0 and 1 inclusive)')
     parser.add_argument('--min_fn', type=str, default='min')
