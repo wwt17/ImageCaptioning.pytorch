@@ -132,21 +132,20 @@ class ShowTellModel(CaptionModel):
                 xt = self.img_embed(fc_feats)
             else:
                 if t == 1: # input <bos>
-                    it = fc_feats.data.new(batch_size).long().zero_()
+                    it = torch.zeros([batch_size], dtype=torch.long, device='cuda')
                 elif sample_max:
-                    sampleLogprobs, it = torch.max(logprobs.data, 1)
-                    it = it.view(-1).long()
+                    sampleLogprobs, it = logprobs.max(-1)
                 else:
                     if temperature == 1.0:
-                        prob_prev = torch.exp(logprobs.data).cpu() # fetch prev distribution: shape Nx(M+1)
+                        prob_prev = torch.exp(logprobs) # fetch prev distribution: shape Nx(M+1)
                     else:
                         # scale logprobs by temperature
-                        prob_prev = torch.exp(torch.div(logprobs.data, temperature)).cpu()
-                    it = torch.multinomial(prob_prev, 1).cuda()
-                    sampleLogprobs = logprobs.gather(1, Variable(it, requires_grad=False)) # gather the logprobs at sampled positions
-                    it = it.view(-1).long() # and flatten indices for downstream processing
+                        prob_prev = torch.exp(torch.div(logprobs, temperature))
+                    it = prob_prev.multinomial(1)
+                    sampleLogprobs = logprobs.gather(-1, it).squeeze(-1) # gather the logprobs at sampled positions
+                    it = it.squeeze(-1)
 
-                xt = self.embed(Variable(it, requires_grad=False))
+                xt = self.embed(it)
 
             if t >= 2:
                 # stop when all finished
@@ -158,7 +157,7 @@ class ShowTellModel(CaptionModel):
                     break
                 it = it * unfinished.type_as(it)
                 seq.append(it) #seq[t] the input of t+2 time step
-                seqLogprobs.append(sampleLogprobs.view(-1))
+                seqLogprobs.append(sampleLogprobs)
 
             output, state = self.core(xt.unsqueeze(0), state)
             logprobs = F.log_softmax(self.logit(self.dropout(output.squeeze(0))), -1)
